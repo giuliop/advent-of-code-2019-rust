@@ -13,6 +13,7 @@ enum Cell {
     Door(char),
     Key(char),
     Start,
+    MultiStart(char),
 }
 
 impl Cell {
@@ -23,6 +24,7 @@ impl Cell {
             '@' => Start,
             'A'..='Z' => Door(c),
             'a'..='z' => Key(c),
+            '1'..='4' => MultiStart(c),
             _ => unreachable!(),
         }
     }
@@ -36,7 +38,7 @@ fn keys_and_start(map: &Map) -> HashMap<Cell, Pos> {
     for (y, line) in map.iter().enumerate() {
         for (x, cell) in line.iter().enumerate() {
             match cell {
-                Start | Key(_) => {
+                Start | Key(_) | MultiStart(_) => {
                     res.insert(*cell, (x, y));
                 }
                 _ => (),
@@ -269,5 +271,40 @@ pub fn a() -> String {
 }
 
 pub fn b() -> String {
-    "".to_string()
+    //let graph = graph_from_map(read_input("../input/day18_2"));
+    let graph = graph_from_map(read_input("../input/test"));
+    let keyset = all_keys(&graph).len();
+    let mut visited = HashMap::new();
+    //dbg!(&graph);
+
+    let mut paths: BinaryHeap<GraphPath> = BinaryHeap::new();
+    paths.push(GraphPath {
+        steps: 0,
+        keys: HashSet::new(),
+        pos: Start,
+    });
+
+    let mut res: Option<usize> = None;
+
+    while let Some(path) = paths.pop() {
+        if path.keys.len() == keyset && (res.is_none() || path.steps < res.unwrap()) {
+            res = Some(path.steps);
+        }
+        let is_candidate = (res.is_none() || res.unwrap() > path.steps)
+            && match visited.get(&(path.pos, serialize_keys(&path.keys))) {
+                Some(steps) if *steps <= path.steps => false,
+                _ => {
+                    visited.insert((path.pos, serialize_keys(&path.keys)), path.steps);
+                    true
+                }
+            };
+        if is_candidate {
+            for edge in &graph[&path.pos] {
+                if edge.doors.iter().all(|door| path.keys.contains(door)) {
+                    paths.push(path.add_edge(&edge))
+                }
+            }
+        }
+    }
+    res.unwrap().to_string()
 }
