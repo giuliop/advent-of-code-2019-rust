@@ -227,6 +227,39 @@ impl PartialOrd for GraphPath {
     }
 }
 
+#[derive(Debug, Clone, Eq, PartialEq)]
+struct GraphPathMultiStart {
+    steps: usize,
+    keys: HashSet<char>,
+    pos: Vec<Cell>,
+}
+
+impl GraphPathMultiStart {
+    fn add_edge(&self, edge: &Edge, robot: usize) -> Self {
+        let steps = self.steps + edge.steps;
+        let mut keys = self.keys.clone();
+        keys.insert(edge.to_key);
+        let mut pos = self.pos.clone();
+        pos[robot] = Key(edge.to_key);
+        Self { steps, keys, pos }
+    }
+}
+
+impl Ord for GraphPathMultiStart {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.keys
+            .len()
+            .cmp(&other.keys.len())
+            .then_with(|| other.steps.cmp(&self.steps))
+            .then(Ordering::Greater)
+    }
+}
+
+impl PartialOrd for GraphPathMultiStart {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
 fn serialize_keys(keyset: &HashSet<char>) -> Vec<char> {
     let mut res: Vec<char> = keyset.iter().copied().collect();
     res.sort_unstable();
@@ -271,17 +304,18 @@ pub fn a() -> String {
 }
 
 pub fn b() -> String {
-    //let graph = graph_from_map(read_input("../input/day18_2"));
-    let graph = graph_from_map(read_input("../input/test"));
+    let graph = graph_from_map(read_input("../input/day18_2"));
     let keyset = all_keys(&graph).len();
     let mut visited = HashMap::new();
-    //dbg!(&graph);
 
-    let mut paths: BinaryHeap<GraphPath> = BinaryHeap::new();
-    paths.push(GraphPath {
+    let mut paths: BinaryHeap<GraphPathMultiStart> = BinaryHeap::new();
+    paths.push(GraphPathMultiStart {
         steps: 0,
         keys: HashSet::new(),
-        pos: Start,
+        pos: ['1', '2', '3', '4']
+            .iter()
+            .map(|n| MultiStart(*n))
+            .collect(),
     });
 
     let mut res: Option<usize> = None;
@@ -291,17 +325,19 @@ pub fn b() -> String {
             res = Some(path.steps);
         }
         let is_candidate = (res.is_none() || res.unwrap() > path.steps)
-            && match visited.get(&(path.pos, serialize_keys(&path.keys))) {
+            && match visited.get(&(path.pos.clone(), serialize_keys(&path.keys))) {
                 Some(steps) if *steps <= path.steps => false,
                 _ => {
-                    visited.insert((path.pos, serialize_keys(&path.keys)), path.steps);
+                    visited.insert((path.pos.clone(), serialize_keys(&path.keys)), path.steps);
                     true
                 }
             };
         if is_candidate {
-            for edge in &graph[&path.pos] {
-                if edge.doors.iter().all(|door| path.keys.contains(door)) {
-                    paths.push(path.add_edge(&edge))
+            for (robot, pos) in path.pos.iter().enumerate() {
+                for edge in &graph[&pos] {
+                    if edge.doors.iter().all(|door| path.keys.contains(door)) {
+                        paths.push(path.add_edge(&edge, robot))
+                    }
                 }
             }
         }
